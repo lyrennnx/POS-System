@@ -13,6 +13,7 @@ let nextUserId  = 3;
 let currentUser = null;   // Set after login
 let editingUserId = null;
 let appBootPromise = Promise.resolve();
+const SESSION_KEY = 'fragrance-pos-session-v1';
 
 // ── ROLE PERMISSIONS ─────────────────────────────────────────
 const PERMISSIONS = {
@@ -93,6 +94,7 @@ async function attemptLogin() {
 
 function doLogin(user) {
   currentUser = user;
+  saveSession();
   startCloudPolling();
 
   // Hide login, show app
@@ -134,6 +136,7 @@ function applyRoleUI() {
 function logoutCurrentUser() {
   if (!confirm('Are you sure you want to log out?')) return;
   currentUser = null;
+  clearSession();
   // Reset login form
   document.getElementById('login-username').value = '';
   document.getElementById('login-password').value = '';
@@ -150,6 +153,36 @@ function logoutCurrentUser() {
   loginScreen.style.animation = 'cardIn 0.4s ease';
 }
 document.getElementById('top-logout').onclick = logoutCurrentUser;
+
+function saveSession() {
+  if (!currentUser) return;
+  localStorage.setItem(SESSION_KEY, JSON.stringify({
+    username: currentUser.username,
+    role: currentUser.role,
+  }));
+}
+
+function clearSession() {
+  localStorage.removeItem(SESSION_KEY);
+}
+
+function restoreSession() {
+  try {
+    const raw = localStorage.getItem(SESSION_KEY);
+    if (!raw) return false;
+    const saved = JSON.parse(raw);
+    const user = users.find(u => u.username === saved.username && u.role === saved.role);
+    if (!user) {
+      clearSession();
+      return false;
+    }
+    doLogin(user);
+    return true;
+  } catch (err) {
+    clearSession();
+    return false;
+  }
+}
 
 // ── ACCESS DENIED ─────────────────────────────────────────────
 document.getElementById('access-denied-ok').onclick = () => {
@@ -1518,4 +1551,5 @@ document.querySelectorAll('.hist-chip').forEach(btn => {
 // ── INIT ─────────────────────────────────────────────────────
 appBootPromise = initializeCloudSync().finally(() => {
   refreshVisibleViews();
+  restoreSession();
 });
