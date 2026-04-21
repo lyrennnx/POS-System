@@ -12,6 +12,7 @@ let users = [
 let nextUserId  = 3;
 let currentUser = null;   // Set after login
 let editingUserId = null;
+let appBootPromise = Promise.resolve();
 
 // ── ROLE PERMISSIONS ─────────────────────────────────────────
 const PERMISSIONS = {
@@ -57,7 +58,8 @@ document.getElementById('login-eye').onclick = () => {
 
 document.getElementById('login-btn').onclick = attemptLogin;
 
-function attemptLogin() {
+async function attemptLogin() {
+  await appBootPromise;
   const username = document.getElementById('login-username').value.trim();
   const password = document.getElementById('login-password').value;
   const errorEl  = document.getElementById('login-error');
@@ -92,6 +94,7 @@ function attemptLogin() {
 
 function doLogin(user) {
   currentUser = user;
+  startCloudPolling();
 
   // Hide login, show app
   const loginScreen = document.getElementById('login-screen');
@@ -104,6 +107,7 @@ function doLogin(user) {
     renderProducts();
     renderCart();
     renderInvHistory();
+    renderHistory();
   }, 340);
 }
 
@@ -238,6 +242,8 @@ document.getElementById('u-save-btn').onclick = () => {
     }
     showToast('✏ User updated!');
   }
+  saveState();
+  persistUsersCloud();
   closeModal('user-modal');
   renderUsers();
 };
@@ -246,6 +252,8 @@ document.getElementById('u-delete-btn').onclick = () => {
   const u = users.find(x => x.id === editingUserId);
   if (!u || !confirm(`Delete user "${u.fullName}"?`)) return;
   users = users.filter(x => x.id !== editingUserId);
+  saveState();
+  persistUsersCloud();
   closeModal('user-modal');
   renderUsers();
   showToast('🗑 User deleted');
@@ -374,6 +382,7 @@ function addToCart(p) {
   const ex = cart.find(i => i.id === p.id);
   if (ex) ex.qty++;
   else cart.push({ ...p, qty: 1 });
+  saveState();
   renderCart();
   renderProducts();
 }
@@ -382,10 +391,11 @@ function changeQty(id, delta) {
   if (!item) return;
   item.qty += delta;
   if (item.qty <= 0) cart = cart.filter(i => i.id !== id);
+  saveState();
   renderCart();
   renderProducts();
 }
-function clearCart() { cart = []; renderCart(); renderProducts(); }
+function clearCart() { cart = []; saveState(); renderCart(); renderProducts(); }
 
 function renderCart() {
   const total = cartTotal();
@@ -537,6 +547,8 @@ $('confirm-charge').onclick = () => {
     }
   });
 
+  saveState();
+  persistOperationalCloud();
   clearCart();
   closeModal('charge-modal');
   renderHistory();
@@ -651,6 +663,8 @@ $('confirm-refund').onclick = () => {
     }
   });
 
+  saveState();
+  persistOperationalCloud();
   closeModal('refund-modal');
   showReceiptDetail(refund);
   renderHistory();
@@ -717,6 +731,8 @@ $('save-product').onclick = () => {
   } else {
     products.push({ id: nextProductId++, name, price, gender });
   }
+  saveState();
+  persistProductsCloud();
   closeModal('edit-modal');
   renderItems();
   showToast(editingProductId !== null ? '✏ Product updated!' : '✅ Product added!');
@@ -725,6 +741,8 @@ $('delete-product').onclick = () => {
   if (editingProductId === null) return;
   products = products.filter(p => p.id !== editingProductId);
   cart     = cart.filter(i => i.id !== editingProductId);
+  saveState();
+  persistProductsCloud();
   closeModal('edit-modal');
   renderCart();
   renderItems();
@@ -793,6 +811,322 @@ let invEditingId    = null;
 let invAdjustId     = null;
 let invFilterStatus = 'all';
 let invNextNum      = 31;
+
+const STORAGE_KEY = 'fragrance-pos-state-v1';
+const cloneData = value => JSON.parse(JSON.stringify(value));
+const DEFAULT_STATE = {
+  users: cloneData(users),
+  nextUserId,
+  products: cloneData(products),
+  receipts: cloneData(receipts),
+  cart: cloneData(cart),
+  receiptCounter: cloneData(receiptCounter),
+  nextProductId,
+  inventory: cloneData(inventory),
+  invHistory: cloneData(invHistory),
+  invNextNum,
+};
+
+function loadSavedState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return;
+    const saved = JSON.parse(raw);
+    if (Array.isArray(saved.users)) users = saved.users;
+    if (Number.isInteger(saved.nextUserId)) nextUserId = saved.nextUserId;
+    if (Array.isArray(saved.products)) products = saved.products;
+    if (Array.isArray(saved.receipts)) receipts = saved.receipts;
+    if (Array.isArray(saved.cart)) cart = saved.cart;
+    if (saved.receiptCounter && typeof saved.receiptCounter === 'object') receiptCounter = saved.receiptCounter;
+    if (Number.isInteger(saved.nextProductId)) nextProductId = saved.nextProductId;
+    if (Array.isArray(saved.inventory)) inventory = saved.inventory;
+    if (Array.isArray(saved.invHistory)) invHistory = saved.invHistory;
+    if (Number.isInteger(saved.invNextNum)) invNextNum = saved.invNextNum;
+  } catch (err) {
+    console.warn('Unable to load saved POS data:', err);
+  }
+}
+
+function saveState() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      users,
+      nextUserId,
+      products,
+      receipts,
+      cart,
+      receiptCounter,
+      nextProductId,
+      inventory,
+      invHistory,
+      invNextNum,
+    }));
+  } catch (err) {
+    console.warn('Unable to save POS data:', err);
+  }
+}
+
+function resetSavedState() {
+  users = cloneData(DEFAULT_STATE.users);
+  nextUserId = DEFAULT_STATE.nextUserId;
+  products = cloneData(DEFAULT_STATE.products);
+  receipts = cloneData(DEFAULT_STATE.receipts);
+  cart = cloneData(DEFAULT_STATE.cart);
+  receiptCounter = cloneData(DEFAULT_STATE.receiptCounter);
+  nextProductId = DEFAULT_STATE.nextProductId;
+  inventory = cloneData(DEFAULT_STATE.inventory);
+  invHistory = cloneData(DEFAULT_STATE.invHistory);
+  invNextNum = DEFAULT_STATE.invNextNum;
+  localStorage.removeItem(STORAGE_KEY);
+}
+
+loadSavedState();
+function recalculateDerivedState() {
+  nextUserId = Math.max(0, ...users.map(u => Number(u.id) || 0)) + 1;
+  nextProductId = Math.max(0, ...products.map(p => Number(p.id) || 0)) + 1;
+
+  const pos2Max = receipts.reduce((max, receipt) => {
+    const match = String(receipt.id || '').match(/^#2-(\d+)$/);
+    return match ? Math.max(max, Number(match[1])) : max;
+  }, 1);
+  receiptCounter = { pos2: pos2Max };
+
+  const invMax = inventory.reduce((max, item) => {
+    const match = String(item.id || '').match(/(\d+)$/);
+    return match ? Math.max(max, Number(match[1])) : max;
+  }, 30);
+  invNextNum = invMax + 1;
+}
+
+recalculateDerivedState();
+
+const SUPABASE_URL = window.SUPABASE_URL || 'https://obqirdbxhqctlvkitavb.supabase.co'
+';
+const SUPABASE_ANON_KEY = window.SUPABASE_ANON_KEY || 'sb_publishable_1AUamrBQvpcjUVpcQMkgIQ_gBOnbnPJ';
+let supabaseClient = null;
+let cloudSyncQueue = Promise.resolve();
+let cloudPollTimer = null;
+
+function hasCloudConfig() {
+  return typeof window.supabase !== 'undefined'
+    && /^https?:\/\//.test(SUPABASE_URL)
+    && !SUPABASE_URL.includes('YOUR_SUPABASE_URL')
+    && !SUPABASE_ANON_KEY.includes('YOUR_SUPABASE_ANON_KEY');
+}
+
+function refreshVisibleViews() {
+  renderProducts();
+  renderCart();
+  renderInvHistory();
+  renderHistory();
+  if (currentScreen === 'receipts') renderReceipts();
+  if (currentScreen === 'inventory') renderInvTable();
+  if (currentScreen === 'items') renderItems();
+  if (currentScreen === 'users') renderUsers();
+}
+
+function mapUsersToRows() {
+  return users.map(u => ({
+    id: u.id,
+    full_name: u.fullName,
+    username: u.username,
+    password: u.password,
+    role: u.role,
+  }));
+}
+
+function mapProductsToRows() {
+  return products.map(p => ({
+    id: p.id,
+    name: p.name,
+    price: p.price,
+    gender: p.gender,
+  }));
+}
+
+function mapReceiptsToRows() {
+  return receipts.map(r => ({
+    id: r.id,
+    date: r.date,
+    time: r.time,
+    total: r.total,
+    items: r.items,
+    payment: r.payment,
+    pos: r.pos,
+    refunded: !!r.refunded,
+    refund_of: r.refundOf || null,
+  }));
+}
+
+function mapInventoryToRows() {
+  return inventory.map(i => ({
+    id: i.id,
+    name: i.name,
+    category: i.category,
+    qty: i.qty,
+    min_stock: i.min,
+  }));
+}
+
+function mapInventoryHistoryToRows() {
+  return invHistory.map(h => ({
+    type: h.type,
+    description: h.desc,
+    time: h.time,
+    date: h.date,
+  }));
+}
+
+async function replaceRemoteTable(table, rows, deleteColumn = 'id') {
+  const { error: deleteError } = await supabaseClient.from(table).delete().not(deleteColumn, 'is', null);
+  if (deleteError) throw deleteError;
+  if (!rows.length) return;
+  const { error: insertError } = await supabaseClient.from(table).insert(rows);
+  if (insertError) throw insertError;
+}
+
+function queueCloudSync(task) {
+  saveState();
+  if (!supabaseClient) return Promise.resolve();
+  cloudSyncQueue = cloudSyncQueue.then(task).catch(err => {
+    console.error('Cloud sync failed:', err);
+    showToast('Cloud save failed');
+  });
+  return cloudSyncQueue;
+}
+
+function persistUsersCloud() {
+  return queueCloudSync(() => replaceRemoteTable('pos_users', mapUsersToRows()));
+}
+
+function persistProductsCloud() {
+  return queueCloudSync(() => replaceRemoteTable('products', mapProductsToRows()));
+}
+
+function persistOperationalCloud() {
+  return queueCloudSync(async () => {
+    await replaceRemoteTable('receipts', mapReceiptsToRows());
+    await replaceRemoteTable('inventory', mapInventoryToRows());
+    await replaceRemoteTable('inventory_history', mapInventoryHistoryToRows(), 'description');
+  });
+}
+
+function persistInventoryCloud() {
+  return queueCloudSync(async () => {
+    await replaceRemoteTable('inventory', mapInventoryToRows());
+    await replaceRemoteTable('inventory_history', mapInventoryHistoryToRows(), 'description');
+  });
+}
+
+async function loadCloudData() {
+  if (!hasCloudConfig()) return false;
+
+  supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  const [
+    usersResult,
+    productsResult,
+    receiptsResult,
+    inventoryResult,
+    historyResult,
+  ] = await Promise.all([
+    supabaseClient.from('pos_users').select('*').order('id'),
+    supabaseClient.from('products').select('*').order('id'),
+    supabaseClient.from('receipts').select('*').order('date', { ascending: false }).order('time', { ascending: false }),
+    supabaseClient.from('inventory').select('*').order('id'),
+    supabaseClient.from('inventory_history').select('*').order('id', { ascending: false }),
+  ]);
+
+  const firstError = [usersResult, productsResult, receiptsResult, inventoryResult, historyResult].find(r => r.error)?.error;
+  if (firstError) throw firstError;
+
+  if (usersResult.data?.length) {
+    users = usersResult.data.map(u => ({
+      id: u.id,
+      fullName: u.full_name,
+      username: u.username,
+      password: u.password,
+      role: u.role,
+    }));
+  }
+
+  if (productsResult.data?.length) {
+    products = productsResult.data.map(p => ({
+      id: p.id,
+      name: p.name,
+      price: Number(p.price),
+      gender: p.gender,
+    }));
+  }
+
+  if (receiptsResult.data?.length) {
+    receipts = receiptsResult.data.map(r => ({
+      id: r.id,
+      date: r.date,
+      time: r.time,
+      total: Number(r.total),
+      items: Array.isArray(r.items) ? r.items : [],
+      payment: r.payment,
+      pos: r.pos,
+      refunded: !!r.refunded,
+      refundOf: r.refund_of || undefined,
+    }));
+  }
+
+  if (inventoryResult.data?.length) {
+    inventory = inventoryResult.data.map(i => ({
+      id: i.id,
+      name: i.name,
+      category: i.category,
+      qty: Number(i.qty),
+      min: Number(i.min_stock),
+    }));
+  }
+
+  if (historyResult.data?.length) {
+    invHistory = historyResult.data.map(h => ({
+      type: h.type,
+      desc: h.description,
+      time: h.time,
+      date: h.date,
+    }));
+  }
+
+  recalculateDerivedState();
+  saveState();
+  if (currentUser) {
+    currentUser = users.find(u => u.username === currentUser.username && u.role === currentUser.role) || currentUser;
+  }
+  return true;
+}
+
+async function initializeCloudSync() {
+  if (!hasCloudConfig()) {
+    console.warn('Supabase config missing. Fill SUPABASE_URL and SUPABASE_ANON_KEY in script.js.');
+    return;
+  }
+
+  try {
+    await loadCloudData();
+  } catch (err) {
+    console.error('Unable to load cloud data:', err);
+    showToast('Cloud sync unavailable');
+    supabaseClient = null;
+  }
+}
+
+function startCloudPolling() {
+  if (!supabaseClient || cloudPollTimer) return;
+  cloudPollTimer = setInterval(async () => {
+    if (document.hidden || !currentUser) return;
+    try {
+      await loadCloudData();
+      refreshVisibleViews();
+    } catch (err) {
+      console.error('Cloud refresh failed:', err);
+    }
+  }, 10000);
+}
 
 // ── STATUS LOGIC ─────────────────────────────────────────────
 function getStockStatus(qty, min) {
@@ -940,6 +1274,8 @@ $('inv-save-btn').onclick = () => {
     addInvHistory('edit', `Edited: ${name} — qty ${old.qty}→${qty}`);
     showToast('✏ Item updated!');
   }
+  saveState();
+  persistInventoryCloud();
   closeModal('inv-modal');
   renderInvTable();
   renderInvHistory();
@@ -949,6 +1285,8 @@ $('inv-delete-btn').onclick = () => {
   if (!p || !confirm(`Delete "${p.name}"?`)) return;
   inventory = inventory.filter(x => x.id !== invEditingId);
   addInvHistory('sub', `Deleted: ${p.name} (${p.id})`);
+  recalculateDerivedState();
+  persistInventoryCloud();
   closeModal('inv-modal');
   renderInvTable();
   renderInvHistory();
@@ -978,6 +1316,7 @@ function doInvAdjust(dir) {
   const newQty = Math.max(0, p.qty + dir * amount);
   inventory    = inventory.map(x => x.id === invAdjustId ? { ...x, qty: newQty } : x);
   addInvHistory(dir > 0 ? 'add' : 'sub', `${p.name}: ${dir>0?'+':'−'}${amount} (${reason}). ${oldQty}→${newQty}`);
+  persistInventoryCloud();
   closeModal('inv-adjust-modal');
   renderInvTable();
   renderInvHistory();
@@ -989,6 +1328,7 @@ function addInvHistory(type, desc) {
   const t = new Date().toLocaleTimeString('en-PH', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
   invHistory.unshift({ type, desc, time: t, date: nowDate() });
   if (invHistory.length > 80) invHistory.pop();
+  saveState();
   renderHistory();
 }
 function renderInvHistory() {
@@ -1178,7 +1518,6 @@ document.querySelectorAll('.hist-chip').forEach(btn => {
 });
 
 // ── INIT ─────────────────────────────────────────────────────
-renderProducts();
-renderCart();
-renderInvHistory();
-renderHistory();
+appBootPromise = initializeCloudSync().finally(() => {
+  refreshVisibleViews();
+});
