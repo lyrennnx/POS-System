@@ -59,7 +59,6 @@ document.getElementById('login-eye').onclick = () => {
 document.getElementById('login-btn').onclick = attemptLogin;
 
 async function attemptLogin() {
-  await appBootPromise;
   const username = document.getElementById('login-username').value.trim();
   const password = document.getElementById('login-password').value;
   const errorEl  = document.getElementById('login-error');
@@ -900,8 +899,7 @@ function recalculateDerivedState() {
 
 recalculateDerivedState();
 
-const SUPABASE_URL = window.SUPABASE_URL || 'https://obqirdbxhqctlvkitavb.supabase.co'
-';
+const SUPABASE_URL = window.SUPABASE_URL || 'https://obqirdbxhqctlvkitavb.supabase.co';
 const SUPABASE_ANON_KEY = window.SUPABASE_ANON_KEY || 'sb_publishable_1AUamrBQvpcjUVpcQMkgIQ_gBOnbnPJ';
 let supabaseClient = null;
 let cloudSyncQueue = Promise.resolve();
