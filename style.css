@@ -436,33 +436,65 @@ body {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  font-size: 13px;
-  font-weight: 700;
+  font-size: 12px;
+  font-weight: 800;
   font-family: var(--font);
   text-align: center;
   padding: 8px;
   line-height: 1.3;
-  box-shadow: 0 3px 8px rgba(0,0,0,0.15);
+  box-shadow: 0 6px 18px rgba(0,0,0,0.18);
   transition: transform 0.13s, box-shadow 0.13s;
   position: relative;
   word-break: break-word;
 }
-.product-btn:hover { transform: scale(1.07); box-shadow: 0 6px 14px rgba(0,0,0,0.22); }
+.product-btn:hover { transform: scale(1.04); box-shadow: 0 10px 22px rgba(0,0,0,0.22); }
 .product-btn:active { transform: scale(0.93); }
 .product-btn.female { background: var(--female); }
+.product-perfume-bg {
+  position: absolute;
+  top: 10%;
+  left: 50%;
+  width: 60%;
+  height: 60%;
+  transform: translateX(-50%);
+  opacity: 0.22;
+  pointer-events: none;
+  z-index: 0;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 240 240'%3E%3Cg fill='none' stroke='white' stroke-width='4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M92 36l18-8 48 4 6 8v26l-8 8-54-2-10-10z'/%3E%3Cpath d='M115 72h30l2 18h-34z'/%3E%3Cpath d='M82 96l14-12h64l14 12 2 90-10 10H88l-10-10z'/%3E%3Cpath d='M96 102v88' opacity='.9'/%3E%3Cpath d='M160 102v88' opacity='.9'/%3E%3Cpath d='M98 188c20-6 42-6 64 0' opacity='.85'/%3E%3Cpath d='M18 198h68' opacity='.7'/%3E%3Cpath d='M176 198h46' opacity='.7'/%3E%3C/g%3E%3C/svg%3E");
+}
+.product-name {
+  position: relative;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  color: #fff;
+  text-shadow: 0 2px 12px rgba(0,0,0,0.28);
+  font-weight: 800;
+  font-size: 13px;
+  line-height: 1.25;
+  max-width: 100%;
+  word-break: break-word;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  z-index: 1;
+}
 
 .product-badge {
   position: absolute;
-  top: 5px; right: 5px;
+  top: 8px; right: 8px;
   background: #FFD700;
   color: #222;
   border-radius: 50%;
-  width: 18px; height: 18px;
-  font-size: 9px;
+  width: 22px; height: 22px;
+  font-size: 11px;
   font-weight: 800;
   display: flex; align-items: center; justify-content: center;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+  box-shadow: 0 3px 8px rgba(0,0,0,0.28);
   font-family: var(--mono);
+  z-index: 2;
 }
 
 /* ── PAGE BAR ─────────────────────────────────────────────── */
@@ -853,6 +885,24 @@ body {
 .settings-group-title { padding: 12px 18px; font-weight: 800; color: var(--accent); font-size: 13px; background: var(--green-light); border-bottom: 1px solid var(--border); }
 .settings-row { display: flex; justify-content: space-between; align-items: center; padding: 13px 18px; border-bottom: 1px solid #f5f5f5; font-size: 13px; }
 .settings-row:last-child { border-bottom: none; }
+.sales-report-group { grid-column: 1 / -1; }
+.sales-report-controls { padding: 16px 18px 6px; }
+.sales-report-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.sales-report-input { max-width: 220px; }
+.sales-report-btn { flex: 0 0 auto; min-width: 170px; margin-top: 12px; }
+.sales-report-results { padding: 10px 18px 18px; }
+.sales-report-empty { padding: 26px 12px; text-align: center; color: var(--text-muted); font-size: 14px; border: 1px dashed var(--border); border-radius: 8px; }
+.sales-report-date { font-size: 14px; font-weight: 800; color: var(--text); margin-bottom: 12px; }
+.sales-report-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
+.sales-report-card { border: 1px solid var(--border); border-radius: 8px; padding: 14px; background: #fafafa; }
+.sales-report-label { font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); margin-bottom: 6px; }
+.sales-report-value { font-size: 22px; font-weight: 800; font-family: var(--mono); color: var(--text); }
+.sales-report-section-title { font-size: 12px; font-weight: 800; color: var(--accent); margin: 14px 0 8px; }
+.sales-report-item-list { display: flex; flex-direction: column; gap: 8px; }
+.sales-report-item { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 11px 12px; border: 1px solid var(--border); border-radius: 8px; background: #fff; }
+.sales-report-item-name { font-size: 13px; font-weight: 700; color: var(--text); }
+.sales-report-item-sub { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+.sales-report-item-qty { font-size: 12px; font-weight: 700; color: var(--accent); }
 
 /* ══════════════════════════════════════════════════════════════
    MODALS
@@ -930,24 +980,53 @@ body {
 /* ── TOAST ──────────────────────────────────────────────────── */
 .toast {
   position: fixed;
-  bottom: 28px;
-  left: 50%;
-  transform: translateX(-50%) translateY(14px);
-  background: #1a1a2e;
-  color: #fff;
-  padding: 12px 28px;
-  border-radius: 50px;
-  font-size: 14px;
-  font-weight: 700;
-  font-family: var(--font);
+  inset: 0;
+  background: rgba(0,0,0,0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
   z-index: 400;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.2s, transform 0.2s;
-  white-space: nowrap;
-  box-shadow: 0 6px 24px rgba(0,0,0,0.3);
+  transition: opacity 0.2s ease;
 }
-.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+.toast.show { opacity: 1; pointer-events: auto; }
+.toast-card {
+  width: min(420px, 92vw);
+  background: var(--white);
+  color: var(--text);
+  border-radius: 12px;
+  padding: 28px 24px 22px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.28);
+  position: relative;
+  text-align: center;
+  transform: translateY(10px) scale(0.98);
+  transition: transform 0.2s ease;
+}
+.toast.show .toast-card { transform: translateY(0) scale(1); }
+.toast-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: 8px;
+  background: #f1f1f1;
+  color: #555;
+  font-size: 13px;
+  cursor: pointer;
+}
+.toast-close:hover { background: #e5e5e5; }
+.toast-message {
+  font-size: 16px;
+  font-weight: 800;
+  font-family: var(--font);
+  color: var(--text);
+  line-height: 1.5;
+  word-break: break-word;
+}
 
 /* ── SCROLLBAR ──────────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 4px; height: 4px; }

@@ -354,10 +354,39 @@ function pad(n, len = 4) { return String(n).padStart(len, '0'); }
 function formatDateLabel(dateStr) {
   return new Date(dateStr + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
 }
-function nowDate() { return new Date().toISOString().split('T')[0]; }
+function nowDate() {
+  const d = new Date();
+  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+  return d.toISOString().split('T')[0];
+}
 function nowTime() { return new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }); }
 function escapeHtml(value) {
   return String(value).replace(/[&<>"']/g, ch => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[ch]));
+}
+function svgToDataUri(svg) {
+  return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
+}
+function getPerfumeBottleArt(name) {
+  // One universal bottle design — clean, bright, detailed
+  const bottle = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 160'>
+    <!-- Pump nozzle -->
+    <rect x='55' y='4' width='18' height='5' rx='2.5' fill='white' fill-opacity='.9'/>
+    <!-- Pump stem -->
+    <rect x='46' y='6' width='8' height='18' rx='4' fill='white' fill-opacity='.85'/>
+    <!-- Neck -->
+    <rect x='38' y='22' width='24' height='10' rx='4' fill='white' fill-opacity='.88'/>
+    <!-- Shoulder taper -->
+    <path d='M28 36 Q38 30 50 30 Q62 30 72 36 L72 44 Q62 40 50 40 Q38 40 28 44 Z' fill='white' fill-opacity='.82'/>
+    <!-- Main bottle body -->
+    <rect x='26' y='42' width='48' height='90' rx='10' fill='white' fill-opacity='.78'/>
+    <!-- Left highlight streak -->
+    <rect x='30' y='50' width='9' height='70' rx='4.5' fill='white' fill-opacity='.38'/>
+    <!-- Label area (slightly darker) -->
+    <rect x='30' y='72' width='40' height='36' rx='4' fill='white' fill-opacity='.12'/>
+    <!-- Bottom base -->
+    <rect x='26' y='130' width='48' height='4' rx='2' fill='white' fill-opacity='.5'/>
+  </svg>`;
+  return svgToDataUri(bottle);
 }
 
 // ── CLOCK ────────────────────────────────────────────────────
@@ -411,23 +440,42 @@ $('search-toggle').onclick = () => {
 function cartTotal() { return cart.reduce((s, i) => s + i.price * i.qty, 0); }
 
 function addToCart(p) {
+  const invItem = inventory.find(inv => inv.name === p.name);
+  if (invItem && invItem.qty <= 0) {
+    showToast('Item is out of stock.');
+    return;
+  }
   const ex = cart.find(i => i.id === p.id);
   if (ex) ex.qty++;
   else cart.push({ ...p, qty: 1 });
   saveState();
   renderCart();
   renderProducts();
+  if (invItem && invItem.qty <= invItem.min) showToast('Warning: Item stock is low.');
+  else showToast('Item successfully added to cart.');
 }
 function changeQty(id, delta) {
   const item = cart.find(i => i.id === id);
   if (!item) return;
   item.qty += delta;
-  if (item.qty <= 0) cart = cart.filter(i => i.id !== id);
+  if (item.qty <= 0) {
+    cart = cart.filter(i => i.id !== id);
+    showToast('Item removed from cart.');
+  }
   saveState();
   renderCart();
   renderProducts();
 }
-function clearCart() { cart = []; saveState(); renderCart(); renderProducts(); }
+function clearCart() {
+  if (cart.length === 0) {
+    showToast('No items in the cart.');
+    return;
+  }
+  cart = [];
+  saveState();
+  renderCart();
+  renderProducts();
+}
 
 function renderCart() {
   const total = cartTotal();
@@ -492,7 +540,11 @@ function renderProducts() {
     pageItems.forEach(p => {
       const inCart = cart.find(i => i.id === p.id);
       const btn = el('button', 'product-btn' + (p.gender === 'female' ? ' female' : ''));
-      btn.innerHTML = `[R] ${p.name}` + (inCart ? `<span class="product-badge">${inCart.qty}</span>` : '');
+      btn.innerHTML = `
+        <span class="product-perfume-bg" aria-hidden="true"></span>
+        <span class="product-name">[R] ${escapeHtml(p.name)}</span>
+        ${inCart ? `<span class="product-badge">${inCart.qty}</span>` : ''}
+      `;
       btn.title   = php(p.price);
       btn.onclick = () => addToCart(p);
       grid.appendChild(btn);
@@ -526,7 +578,10 @@ document.querySelectorAll('.filter-btn').forEach(btn => {
 
 // ── CHARGE ───────────────────────────────────────────────────
 $('btn-charge').onclick = () => {
-  if (cartTotal() === 0) return;
+  if (cartTotal() === 0) {
+    showToast('No items in the cart.');
+    return;
+  }
   $('charge-amount').textContent = php(cartTotal());
   $('cash-input').value = cartTotal().toFixed(2);
   updateChange(); validateCharge();
@@ -558,6 +613,7 @@ function validateCharge() {
 }
 
 $('confirm-charge').onclick = () => {
+  try {
   receiptCounter.pos2++;
   const r = {
     id: `#2-${pad(receiptCounter.pos2)}`, date: nowDate(), time: nowTime(),
@@ -584,7 +640,11 @@ $('confirm-charge').onclick = () => {
   clearCart();
   closeModal('charge-modal');
   renderHistory();
-  showToast('✓ Payment Successful!');
+  showToast('Transaction completed successfully.');
+  } catch (err) {
+    console.error(err);
+    showToast('Unable to process transaction. Please try again.');
+  }
 };
 
 // ── RECEIPTS ─────────────────────────────────────────────────
@@ -767,7 +827,7 @@ $('save-product').onclick = () => {
   persistProductsCloud();
   closeModal('edit-modal');
   renderItems();
-  showToast(editingProductId !== null ? '✏ Product updated!' : '✅ Product added!');
+  showToast(editingProductId !== null ? 'Action completed successfully.' : 'Item added to inventory successfully.');
 };
 $('delete-product').onclick = () => {
   if (editingProductId === null) return;
@@ -778,7 +838,7 @@ $('delete-product').onclick = () => {
   closeModal('edit-modal');
   renderCart();
   renderItems();
-  showToast('🗑 Product deleted');
+  showToast('Item removed from inventory.');
 };
 
 // ── MODAL HELPERS ────────────────────────────────────────────
@@ -793,13 +853,132 @@ document.querySelectorAll('.modal-overlay').forEach(overlay => {
 });
 
 // ── TOAST ────────────────────────────────────────────────────
+function normalizeToastMessage(msg) {
+  if (msg === '✓ Payment Successful!') return 'Transaction completed successfully.';
+  if (msg === '↩ Refund Processed') return 'Action completed successfully.';
+  if (msg === '✅ Product added!') return 'Item added to inventory successfully.';
+  if (msg === '✏ Product updated!') return 'Item details updated successfully.';
+  if (msg === '🗑 Product deleted') return 'Item removed from inventory.';
+  if (msg === '✅ Item added!') return 'Item added to inventory successfully.';
+  if (msg === '✏ Item updated!') return 'Item details updated successfully.';
+  if (msg === '🗑 Item deleted') return 'Item removed from inventory.';
+  if (msg === 'Cloud save failed') return 'Something went wrong. Please try again.';
+  if (msg === 'Cloud sync unavailable') return 'Something went wrong. Please try again.';
+  if (msg === '⚠ Fill in ID and Name') return 'Something went wrong. Please try again.';
+  if (msg === '⚠ Enter valid quantity') return 'Something went wrong. Please try again.';
+  if (msg === '⚠ Min stock must be ≥ 1') return 'Something went wrong. Please try again.';
+  if (msg === '⚠ Product ID already exists') return 'Something went wrong. Please try again.';
+  if (msg === '⚠ All fields are required') return 'Something went wrong. Please try again.';
+  if (msg === '⚠ Username already taken') return 'Something went wrong. Please try again.';
+  if (msg === '✅ User added!') return 'Action completed successfully.';
+  if (msg === '✏ User updated!') return 'Action completed successfully.';
+  if (msg === '🗑 User deleted') return 'Action completed successfully.';
+  if (typeof msg === 'string' && msg.startsWith('Sales report generated successfully for ')) return 'Sales report generated successfully.';
+  if (msg === 'No sales data available for the selected date') return 'No sales data available.';
+  return msg;
+}
+
 function showToast(msg) {
   const t = $('toast');
-  t.textContent = msg;
+  const body = $('toast-message');
+  body.textContent = normalizeToastMessage(msg);
   t.classList.add('show');
   clearTimeout(t._t);
   t._t = setTimeout(() => t.classList.remove('show'), 2400);
 }
+
+$('toast-close').onclick = () => $('toast').classList.remove('show');
+$('toast').onclick = e => {
+  if (e.target === $('toast')) $('toast').classList.remove('show');
+};
+
+function renderSalesReport(dateStr, salesData) {
+  const wrap = $('sales-report-results');
+  if (!wrap) return;
+
+  if (!salesData) {
+    wrap.innerHTML = '<div class="sales-report-empty">Select a date and generate a report.</div>';
+    return;
+  }
+
+  if (salesData.transactions.length === 0) {
+    wrap.innerHTML = `
+      <div class="sales-report-date">Sales Report for ${dateStr}</div>
+      <div class="sales-report-empty">No sales data available for this date.</div>
+    `;
+    return;
+  }
+
+  wrap.innerHTML = `
+    <div class="sales-report-date">Sales Report for ${dateStr}</div>
+    <div class="sales-report-summary">
+      <div class="sales-report-card">
+        <div class="sales-report-label">Total Sales</div>
+        <div class="sales-report-value">${php(salesData.totalSales)}</div>
+      </div>
+      <div class="sales-report-card">
+        <div class="sales-report-label">Transactions</div>
+        <div class="sales-report-value">${salesData.transactions.length}</div>
+      </div>
+      <div class="sales-report-card">
+        <div class="sales-report-label">Items Sold</div>
+        <div class="sales-report-value">${salesData.totalItems}</div>
+      </div>
+    </div>
+    <div class="sales-report-section-title">Items Sold</div>
+    <div class="sales-report-item-list">
+      ${salesData.items.map(item => `
+        <div class="sales-report-item">
+          <div>
+            <div class="sales-report-item-name">${escapeHtml(item.name)}</div>
+            <div class="sales-report-item-sub">${php(item.sales)} total sales</div>
+          </div>
+          <div class="sales-report-item-qty">${item.qty} sold</div>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
+function buildSalesReport(dateStr) {
+  const transactions = receipts.filter(r => r.date === dateStr && !r.refundOf);
+  const itemMap = new Map();
+
+  transactions.forEach(receipt => {
+    receipt.items.forEach(item => {
+      const key = item.name;
+      const entry = itemMap.get(key) || { name: item.name, qty: 0, sales: 0 };
+      entry.qty += item.qty;
+      entry.sales += item.qty * item.price;
+      itemMap.set(key, entry);
+    });
+  });
+
+  return {
+    transactions,
+    totalSales: transactions.reduce((sum, receipt) => sum + receipt.total, 0),
+    totalItems: Array.from(itemMap.values()).reduce((sum, item) => sum + item.qty, 0),
+    items: Array.from(itemMap.values()).sort((a, b) => b.qty - a.qty || b.sales - a.sales),
+  };
+}
+
+$('generate-report-btn').onclick = () => {
+  const dateStr = $('report-date').value;
+  if (!dateStr) {
+    showToast('Please select a date first');
+    return;
+  }
+
+  const report = buildSalesReport(dateStr);
+  renderSalesReport(dateStr, report);
+
+  if (report.transactions.length === 0) {
+    showToast('No sales data available.');
+    return;
+  }
+
+  showToast('Sales report generated successfully.');
+};
 
 // ════════════════════════════════════════════════════════════
 //  INVENTORY MODULE

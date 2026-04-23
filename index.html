@@ -357,6 +357,19 @@
             <div class="settings-row"><span>Edition</span><span>Fragrance Shop</span></div>
             <div class="settings-row"><span>Owner</span><span>Owner</span></div>
           </div>
+          <div class="settings-group sales-report-group">
+            <div class="settings-group-title">Sales Report</div>
+            <div class="sales-report-controls">
+              <label class="modal-label" for="report-date">Report Date</label>
+              <div class="sales-report-actions">
+                <input type="date" class="modal-input sales-report-input" id="report-date" />
+                <button class="btn-confirm sales-report-btn" id="generate-report-btn">Generate Report</button>
+              </div>
+            </div>
+            <div class="sales-report-results" id="sales-report-results">
+              <div class="sales-report-empty">Select a date and generate a report.</div>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -590,7 +603,12 @@
   </div>
 </div>
 
-<div class="toast" id="toast"></div>
+<div class="toast" id="toast">
+  <div class="toast-card">
+    <button class="toast-close" id="toast-close" type="button">✕</button>
+    <div class="toast-message" id="toast-message"></div>
+  </div>
+</div>
 
 <!-- Access Denied overlay -->
 <div class="access-denied" id="access-denied">
