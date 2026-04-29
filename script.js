@@ -337,6 +337,7 @@ let receipts = [
 let cart            = [];
 let currentScreen   = 'sales';
 let selectedReceipt = null;
+let latestSalesReport = null;
 let editingProductId = null;
 let activePayment   = 'Cash';
 let activeGenderFilter = 'all';
@@ -724,6 +725,7 @@ $('btn-close-detail').onclick = () => {
 };
 
 // ── REFUND ───────────────────────────────────────────────────
+$('btn-print-receipt').onclick = () => printReceipt(selectedReceipt);
 $('btn-refund').onclick = () => {
   if (!selectedReceipt) return;
   if (!can('refund')) { showAccessDenied(); return; }
@@ -892,22 +894,352 @@ $('toast').onclick = e => {
   if (e.target === $('toast')) $('toast').classList.remove('show');
 };
 
+function formatDisplayDate(dateStr) {
+  if (!dateStr) return '';
+  const parsed = new Date(`${dateStr}T00:00:00`);
+  if (Number.isNaN(parsed.getTime())) return dateStr;
+  return parsed.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+}
+
+function openPrintWindow(title, content) {
+  const printWindow = window.open('', '_blank', 'width=900,height=960');
+  if (!printWindow) {
+    showToast('Something went wrong. Please try again.');
+    return;
+  }
+
+  printWindow.document.write(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>${escapeHtml(title)}</title>
+  <style>
+    :root {
+      --accent: #b768ff;
+      --text: #1e1e1e;
+      --muted: #6f7383;
+      --border: #d9dbe6;
+      --panel: #f7f7fb;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Arial, Helvetica, sans-serif;
+      color: var(--text);
+      background: #fff;
+      padding: 28px;
+    }
+    .print-sheet {
+      max-width: 780px;
+      margin: 0 auto;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 28px;
+    }
+    .print-header {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      align-items: flex-start;
+      border-bottom: 2px solid var(--border);
+      padding-bottom: 14px;
+      margin-bottom: 18px;
+    }
+    .print-brand {
+      font-size: 24px;
+      font-weight: 800;
+      margin: 0 0 4px;
+    }
+    .print-subtitle {
+      color: var(--muted);
+      font-size: 13px;
+      margin: 0;
+    }
+    .print-title {
+      font-size: 14px;
+      font-weight: 800;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin: 0 0 4px;
+      text-align: right;
+    }
+    .print-date {
+      color: var(--muted);
+      font-size: 13px;
+      text-align: right;
+      margin: 0;
+    }
+    .print-meta {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px 18px;
+      margin-bottom: 18px;
+    }
+    .print-meta-box,
+    .print-stat,
+    .print-list-item,
+    .print-transaction {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: #fff;
+    }
+    .print-meta-box {
+      padding: 12px 14px;
+      font-size: 13px;
+    }
+    .print-meta-label,
+    .print-stat-label,
+    .print-item-sub {
+      color: var(--muted);
+    }
+    .print-items,
+    .print-transactions {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .print-item-row,
+    .print-transaction-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: center;
+    }
+    .print-item-row {
+      padding: 8px 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 13px;
+    }
+    .print-item-row:last-child {
+      border-bottom: none;
+      padding-bottom: 0;
+    }
+    .print-item-name,
+    .print-stat-value,
+    .print-item-price,
+    .print-transaction-value {
+      font-weight: 700;
+    }
+    .print-total {
+      margin-top: 14px;
+      padding-top: 14px;
+      border-top: 2px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      font-size: 16px;
+      font-weight: 800;
+    }
+    .print-badge {
+      margin-top: 14px;
+      padding: 10px 12px;
+      border-radius: 10px;
+      background: #fff3cd;
+      color: #8a5b00;
+      font-size: 13px;
+      font-weight: 700;
+    }
+    .print-section-title {
+      margin: 22px 0 10px;
+      font-size: 14px;
+      font-weight: 800;
+      color: var(--accent);
+      text-transform: uppercase;
+    }
+    .print-summary {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+    }
+    .print-stat {
+      padding: 14px;
+      background: var(--panel);
+    }
+    .print-stat-label {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+    }
+    .print-stat-value {
+      font-size: 22px;
+    }
+    .print-list-item,
+    .print-transaction {
+      padding: 12px 14px;
+    }
+    .print-transaction-value {
+      text-align: right;
+    }
+    .print-footer {
+      margin-top: 22px;
+      text-align: center;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    @media print {
+      body { padding: 0; }
+      .print-sheet {
+        border: none;
+        border-radius: 0;
+        max-width: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  ${content}
+</body>
+</html>`);
+  printWindow.document.close();
+  printWindow.focus();
+  setTimeout(() => {
+    try {
+      printWindow.print();
+    } catch (error) {
+      showToast('Something went wrong. Please try again.');
+    }
+  }, 250);
+}
+
+function printReceipt(receipt) {
+  if (!receipt) {
+    showToast('Something went wrong. Please try again.');
+    return;
+  }
+
+  const receiptItems = receipt.items.map(item => `
+    <div class="print-item-row">
+      <div>
+        <div class="print-item-name">${escapeHtml(item.name)}</div>
+        <div class="print-item-sub">${item.qty} x ${php(item.price)}</div>
+      </div>
+      <div class="print-item-price">${php(item.qty * item.price)}</div>
+    </div>
+  `).join('');
+
+  const flags = [
+    receipt.refunded ? '<div class="print-badge">This receipt has been refunded.</div>' : '',
+    receipt.refundOf ? `<div class="print-badge">Refund of ${escapeHtml(receipt.refundOf)}</div>` : '',
+  ].join('');
+
+  openPrintWindow(
+    `Receipt ${receipt.id}`,
+    `<div class="print-sheet">
+      <div class="print-header">
+        <div>
+          <h1 class="print-brand">1470. Fragrance Shop</h1>
+          <p class="print-subtitle">POS Receipt</p>
+        </div>
+        <div>
+          <p class="print-title">Receipt ${escapeHtml(receipt.id)}</p>
+          <p class="print-date">${escapeHtml(receipt.date)}, ${escapeHtml(receipt.time)}</p>
+        </div>
+      </div>
+      <div class="print-meta">
+        <div class="print-meta-box"><strong>Employee:</strong> Owner</div>
+        <div class="print-meta-box"><strong>POS:</strong> ${escapeHtml(receipt.pos)}</div>
+        <div class="print-meta-box"><strong>Payment:</strong> ${escapeHtml(receipt.payment)}</div>
+        <div class="print-meta-box"><strong>Status:</strong> ${receipt.refundOf ? 'Refund' : receipt.refunded ? 'Refunded' : 'Completed'}</div>
+      </div>
+      <div class="print-items">
+        ${receiptItems}
+      </div>
+      <div class="print-total"><span>Total</span><span>${php(receipt.total)}</span></div>
+      ${flags}
+      <div class="print-footer">Thank you for shopping with us.</div>
+    </div>`
+  );
+}
+
+function printSalesReport(reportState) {
+  if (!reportState?.transactions?.length) {
+    showToast(reportState ? 'No sales data available.' : 'Please select a date first');
+    return;
+  }
+
+  const itemRows = reportState.items.map(item => `
+    <div class="print-list-item">
+      <div class="print-item-row" style="padding:0;border-bottom:none;">
+        <div>
+          <div class="print-item-name">${escapeHtml(item.name)}</div>
+          <div class="print-item-sub">${php(item.sales)} total sales</div>
+        </div>
+        <div class="print-item-price">${item.qty} sold</div>
+      </div>
+    </div>
+  `).join('');
+
+  const transactionRows = reportState.transactions.map(receipt => `
+    <div class="print-transaction">
+      <div class="print-transaction-row">
+        <div>
+          <div class="print-item-name">${escapeHtml(receipt.id)}</div>
+          <div class="print-item-sub">${escapeHtml(receipt.time)} · ${escapeHtml(receipt.payment)} · ${escapeHtml(receipt.pos)}</div>
+        </div>
+        <div class="print-transaction-value">${php(receipt.total)}</div>
+      </div>
+    </div>
+  `).join('');
+
+  openPrintWindow(
+    `Sales Report ${reportState.dateStr}`,
+    `<div class="print-sheet">
+      <div class="print-header">
+        <div>
+          <h1 class="print-brand">1470. Fragrance Shop</h1>
+          <p class="print-subtitle">Daily Sales Report</p>
+        </div>
+        <div>
+          <p class="print-title">Sales Report</p>
+          <p class="print-date">${escapeHtml(formatDisplayDate(reportState.dateStr))}</p>
+        </div>
+      </div>
+      <div class="print-summary">
+        <div class="print-stat">
+          <div class="print-stat-label">Total Sales</div>
+          <div class="print-stat-value">${php(reportState.totalSales)}</div>
+        </div>
+        <div class="print-stat">
+          <div class="print-stat-label">Transactions</div>
+          <div class="print-stat-value">${reportState.transactions.length}</div>
+        </div>
+        <div class="print-stat">
+          <div class="print-stat-label">Items Sold</div>
+          <div class="print-stat-value">${reportState.totalItems}</div>
+        </div>
+      </div>
+      <div class="print-section-title">Items Sold</div>
+      <div class="print-items">${itemRows}</div>
+      <div class="print-section-title">Transactions</div>
+      <div class="print-transactions">${transactionRows}</div>
+      <div class="print-footer">Generated on ${escapeHtml(nowDate())} at ${escapeHtml(nowTime())}</div>
+    </div>`
+  );
+}
+
 function renderSalesReport(dateStr, salesData) {
   const wrap = $('sales-report-results');
+  const printBtn = $('print-report-btn');
   if (!wrap) return;
 
   if (!salesData) {
+    latestSalesReport = null;
+    if (printBtn) printBtn.disabled = true;
     wrap.innerHTML = '<div class="sales-report-empty">Select a date and generate a report.</div>';
     return;
   }
 
   if (salesData.transactions.length === 0) {
+    if (printBtn) printBtn.disabled = true;
     wrap.innerHTML = `
       <div class="sales-report-date">Sales Report for ${dateStr}</div>
       <div class="sales-report-empty">No sales data available for this date.</div>
     `;
     return;
   }
+
+  if (printBtn) printBtn.disabled = false;
 
   wrap.innerHTML = `
     <div class="sales-report-date">Sales Report for ${dateStr}</div>
@@ -965,11 +1297,14 @@ function buildSalesReport(dateStr) {
 $('generate-report-btn').onclick = () => {
   const dateStr = $('report-date').value;
   if (!dateStr) {
+    latestSalesReport = null;
+    renderSalesReport(null, null);
     showToast('Please select a date first');
     return;
   }
 
   const report = buildSalesReport(dateStr);
+  latestSalesReport = { dateStr, ...report };
   renderSalesReport(dateStr, report);
 
   if (report.transactions.length === 0) {
@@ -979,6 +1314,8 @@ $('generate-report-btn').onclick = () => {
 
   showToast('Sales report generated successfully.');
 };
+
+$('print-report-btn').onclick = () => printSalesReport(latestSalesReport);
 
 // ════════════════════════════════════════════════════════════
 //  INVENTORY MODULE
